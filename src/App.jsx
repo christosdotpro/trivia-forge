@@ -144,7 +144,7 @@ const App = () => {
       setUserAnswers([]);
       setScore(0);
     } catch (err) {
-      setError("Failed to forge the trivia. Please check your connection or try a different topic.");
+      setError("Failed to craft the trivia. Please check your connection or try a different topic.");
       setGameState('setup');
     }
   };
@@ -176,7 +176,7 @@ const App = () => {
         <div className="inline-flex items-center justify-center p-3 bg-indigo-500/10 rounded-2xl mb-4">
           <BrainCircuit className="w-10 h-10 text-indigo-400" />
         </div>
-        <h1 className="text-4xl font-extrabold tracking-tight text-white">Trivia Forge</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight text-white">TriviaCraft</h1>
         <p className="text-slate-400 text-lg">Harness AI agents to create custom trivia experiences.</p>
       </div>
 
@@ -315,7 +315,7 @@ const App = () => {
           className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-indigo-500/20 transition-all active:scale-[0.98]"
         >
           <Play className="w-5 h-5 fill-current" />
-          Start Forge
+          Start Craft
         </button>
       </div>
     </div>
@@ -425,7 +425,7 @@ const App = () => {
           
           <div className="relative z-10 space-y-4">
             <Trophy className="w-20 h-20 text-yellow-400 mx-auto animate-bounce" />
-            <h2 className="text-4xl font-extrabold text-white">Forge Complete!</h2>
+            <h2 className="text-4xl font-extrabold text-white">Craft Complete!</h2>
             <div className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400 py-4">
               {score} / {questions.length}
             </div>

@@ -1,4 +1,4 @@
-# Trivia Forge
+# TriviaCraft
 
 Harness AI agents to create custom trivia experiences. A React-based web application that uses Google Gemini AI to generate personalized trivia questions.
 
@@ -65,4 +65,5 @@ npm run preview
 ## License
 
 MIT
+
 
