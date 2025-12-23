@@ -339,11 +339,30 @@ const App = () => {
     const q = questions[currentIndex];
     const progress = ((currentIndex + 1) / questions.length) * 100;
 
+    const handleStartOver = () => {
+      if (window.confirm('Are you sure you want to start over? Your progress will be lost.')) {
+        setGameState('setup');
+        setCurrentIndex(0);
+        setUserAnswers([]);
+        setScore(0);
+        setTextInput('');
+      }
+    };
+
     return (
       <div className="max-w-3xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-500">
         <div className="flex items-center justify-between mb-2">
           <div className="text-slate-400 text-sm font-bold uppercase tracking-widest">Question {currentIndex + 1} of {questions.length}</div>
-          <div className="text-indigo-400 text-sm font-bold bg-indigo-500/10 px-3 py-1 rounded-full uppercase tracking-widest">{getEffectiveTopic()}</div>
+          <div className="flex items-center gap-3">
+            <div className="text-indigo-400 text-sm font-bold bg-indigo-500/10 px-3 py-1 rounded-full uppercase tracking-widest">{getEffectiveTopic()}</div>
+            <button
+              onClick={handleStartOver}
+              className="text-slate-500 hover:text-slate-300 transition-colors p-1.5 rounded-lg hover:bg-slate-800/50"
+              title="Start over"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
