@@ -17,7 +17,7 @@ import {
 
 // --- Configuration & API Utilities ---
 
-const API_KEY = ""; // Provided by environment
+const API_KEY = import.meta.env.VITE_API_KEY || ""; // Provided by environment
 const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
 
 const MODELS = [
