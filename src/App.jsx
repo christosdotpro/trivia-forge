@@ -17,13 +17,22 @@ import {
 
 // --- Configuration & API Utilities ---
 
-const API_KEY = import.meta.env.VITE_API_KEY || ""; // Provided by environment
-const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
+const API_KEYS = {
+  gemini: import.meta.env.VITE_GEMINI_API_KEY || "",
+  claude: import.meta.env.VITE_CLAUDE_API_KEY || "",
+  chatgpt: import.meta.env.VITE_CHATGPT_API_KEY || "",
+};
 
 const MODELS = [
-  { id: 'gemini-3-flash', name: 'Gemini 3 Flash (Fast & Smart)', icon: '⚡' },
-  { id: 'gemini-3-pro', name: 'Gemini 3 Pro (High Reasoning)', icon: '🧠' },
-  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Steady)', icon: '💎' },
+  { id: 'gemini-3-flash', name: 'Gemini 3 Flash', icon: '⚡', provider: 'gemini' },
+  { id: 'gemini-3-pro', name: 'Gemini 3 Pro', icon: '🧠', provider: 'gemini' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', icon: '💎', provider: 'gemini' },
+  { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', icon: '🎯', provider: 'claude' },
+  { id: 'claude-3-opus', name: 'Claude 3 Opus', icon: '🎨', provider: 'claude' },
+  { id: 'claude-3-haiku', name: 'Claude 3 Haiku', icon: '⚡', provider: 'claude' },
+  { id: 'gpt-4', name: 'GPT-4', icon: '🌟', provider: 'chatgpt' },
+  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', icon: '🚀', provider: 'chatgpt' },
+  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', icon: '💫', provider: 'chatgpt' },
 ];
 
 const PRESET_TOPICS = [
@@ -81,6 +90,9 @@ const App = () => {
     model: 'gemini-3-flash'
   });
 
+  // Get the selected model info
+  const getSelectedModel = () => MODELS.find(m => m.id === config.model) || MODELS[0];
+
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [userAnswers, setUserAnswers] = useState([]);
@@ -95,6 +107,80 @@ const App = () => {
 
   // --- Core Logic ---
 
+  // API call functions for different providers
+  const callGeminiAPI = async (systemPrompt, userQuery) => {
+    const modelId = config.model === 'gemini-3-flash' ? 'gemini-2.0-flash-exp' :
+                    config.model === 'gemini-3-pro' ? 'gemini-1.5-pro' :
+                    'gemini-1.5-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${API_KEYS.gemini}`;
+    
+    const result = await fetchWithRetry(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: userQuery }] }],
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        generationConfig: {
+          responseMimeType: "application/json"
+        }
+      })
+    });
+
+    return result.candidates?.[0]?.content?.parts?.[0]?.text;
+  };
+
+  const callClaudeAPI = async (systemPrompt, userQuery) => {
+    const modelId = config.model === 'claude-3-5-sonnet' ? 'claude-3-5-sonnet-20241022' :
+                    config.model === 'claude-3-opus' ? 'claude-3-opus-20240229' :
+                    'claude-3-haiku-20240307';
+    const url = 'https://api.anthropic.com/v1/messages';
+    
+    const result = await fetchWithRetry(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': API_KEYS.claude,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: modelId,
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userQuery }]
+      })
+    });
+
+    return result.content?.[0]?.text;
+  };
+
+  const callChatGPTAPI = async (systemPrompt, userQuery) => {
+    const modelId = config.model === 'gpt-4' ? 'gpt-4' :
+                    config.model === 'gpt-4-turbo' ? 'gpt-4-turbo-preview' :
+                    'gpt-3.5-turbo';
+    const url = 'https://api.openai.com/v1/chat/completions';
+    
+    // Update system prompt for JSON object format
+    const jsonSystemPrompt = systemPrompt + '\n\nIMPORTANT: Return your response as a JSON object with a "questions" key containing the array of trivia questions. Example format: {"questions": [...]}';
+    
+    const result = await fetchWithRetry(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_KEYS.chatgpt}`
+      },
+      body: JSON.stringify({
+        model: modelId,
+        messages: [
+          { role: 'system', content: jsonSystemPrompt },
+          { role: 'user', content: userQuery }
+        ],
+        response_format: { type: "json_object" }
+      })
+    });
+
+    return result.choices?.[0]?.message?.content;
+  };
+
   const generateTrivia = async () => {
     const finalTopic = getEffectiveTopic();
     if (config.selectedTopic === 'Other' && !config.customTopic.trim()) {
@@ -102,10 +188,18 @@ const App = () => {
       return;
     }
 
+    const selectedModel = getSelectedModel();
+    const apiKey = API_KEYS[selectedModel.provider];
+    
+    if (!apiKey) {
+      setError(`Please configure your ${selectedModel.provider === 'gemini' ? 'Gemini' : selectedModel.provider === 'claude' ? 'Claude' : 'ChatGPT'} API key in the .env file.`);
+      return;
+    }
+
     setGameState('loading');
     setError(null);
 
-    const systemPrompt = `You are the ${config.model} AI agent. 
+    const systemPrompt = `You are an AI agent specialized in creating trivia questions. 
     Your task is to generate exactly ${config.count} trivia questions.
     Topic: ${finalTopic}
     Complexity: ${config.complexity} (Target audience: ${COMPLEXITY_LEVELS.find(l => l.id === config.complexity).label})
@@ -118,33 +212,48 @@ const App = () => {
     ${config.format === 'multiple-choice' ? '- "options": array of 4 strings (including the correct answer)' : ''}
     - "explanation": a brief 1-sentence explanation of why it's correct.
 
-    Respond ONLY with the JSON code block. No conversation.`;
+    Respond ONLY with the JSON array. No conversation, no markdown, just the JSON.`;
 
-    const userQuery = `Generate the ${finalTopic} trivia now.`;
+    const userQuery = `Generate ${config.count} ${finalTopic} trivia questions now.`;
 
     try {
-      const result = await fetchWithRetry(`${API_URL}?key=${API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: userQuery }] }],
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          generationConfig: {
-            responseMimeType: "application/json"
-          }
-        })
-      });
-
-      const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
-      const parsedData = JSON.parse(rawText);
+      let rawText;
       
-      setQuestions(parsedData);
+      if (selectedModel.provider === 'gemini') {
+        rawText = await callGeminiAPI(systemPrompt, userQuery);
+      } else if (selectedModel.provider === 'claude') {
+        rawText = await callClaudeAPI(systemPrompt, userQuery);
+      } else if (selectedModel.provider === 'chatgpt') {
+        rawText = await callChatGPTAPI(systemPrompt, userQuery);
+      }
+
+      // Clean up the response - remove markdown code blocks if present
+      let cleanedText = rawText.trim();
+      if (cleanedText.startsWith('```json')) {
+        cleanedText = cleanedText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      } else if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/```\n?/g, '');
+      }
+      
+      const parsedData = JSON.parse(cleanedText);
+      
+      // Handle OpenAI's JSON object format
+      const questionsArray = Array.isArray(parsedData) ? parsedData : 
+                            parsedData.questions ? parsedData.questions :
+                            Object.values(parsedData).find(Array.isArray) || parsedData;
+      
+      if (!Array.isArray(questionsArray)) {
+        throw new Error('Invalid response format');
+      }
+      
+      setQuestions(questionsArray);
       setGameState('playing');
       setCurrentIndex(0);
       setUserAnswers([]);
       setScore(0);
     } catch (err) {
-      setError("Failed to craft the trivia. Please check your connection or try a different topic.");
+      console.error('API Error:', err);
+      setError(`Failed to craft the trivia. ${err.message || 'Please check your API key and connection.'}`);
       setGameState('setup');
     }
   };
@@ -231,27 +340,66 @@ const App = () => {
         </div>
 
         {/* Agent Selection */}
-        <div className="space-y-2">
+        <div className="space-y-4">
           <label className="text-sm font-medium text-slate-400 flex items-center gap-2">
-            <BrainCircuit className="w-4 h-4" /> Intelligence Agent
+            <BrainCircuit className="w-4 h-4" /> AI Provider & Model
           </label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {MODELS.map(m => (
-              <button
-                key={m.id}
-                onClick={() => setConfig({...config, model: m.id})}
-                className={`p-4 rounded-xl border text-left transition-all ${
-                  config.model === m.id 
-                    ? 'bg-indigo-500/20 border-indigo-500 text-white shadow-[0_0_15px_rgba(99,102,241,0.3)]' 
-                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
-                }`}
-              >
-                <div className="text-xl mb-1">{m.icon}</div>
-                <div className="text-xs font-bold uppercase tracking-wider">{m.name.split(' ')[0]}</div>
-                <div className="text-[10px] opacity-60">Optimized for trivia</div>
-              </button>
-            ))}
-          </div>
+          
+          {/* Group models by provider */}
+          {['gemini', 'claude', 'chatgpt'].map(provider => {
+            const providerModels = MODELS.filter(m => m.provider === provider);
+            const providerName = provider === 'gemini' ? 'Google Gemini' : 
+                                provider === 'claude' ? 'Anthropic Claude' : 
+                                'OpenAI ChatGPT';
+            const providerColor = provider === 'gemini' ? 'blue' : 
+                                 provider === 'claude' ? 'orange' : 
+                                 'green';
+            
+            return (
+              <div key={provider} className="space-y-2">
+                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-2">
+                  {providerName}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {providerModels.map(m => {
+                    const hasApiKey = API_KEYS[provider];
+                    const isSelected = config.model === m.id;
+                    const getProviderStyles = () => {
+                      if (provider === 'gemini') {
+                        return isSelected ? 'bg-blue-500/20 border-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.3)]' : '';
+                      } else if (provider === 'claude') {
+                        return isSelected ? 'bg-orange-500/20 border-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.3)]' : '';
+                      } else {
+                        return isSelected ? 'bg-green-500/20 border-green-500 text-white shadow-[0_0_15px_rgba(34,197,94,0.3)]' : '';
+                      }
+                    };
+                    
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => setConfig({...config, model: m.id})}
+                        disabled={!hasApiKey}
+                        className={`p-4 rounded-xl border text-left transition-all ${
+                          isSelected
+                            ? getProviderStyles()
+                            : hasApiKey
+                            ? 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                            : 'bg-slate-800/50 border-slate-800 text-slate-600 opacity-50 cursor-not-allowed'
+                        }`}
+                        title={!hasApiKey ? `Configure ${providerName} API key in .env file` : ''}
+                      >
+                        <div className="text-xl mb-1">{m.icon}</div>
+                        <div className="text-xs font-bold uppercase tracking-wider">{m.name}</div>
+                        <div className="text-[10px] opacity-60">
+                          {hasApiKey ? 'Ready' : 'API key needed'}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Complexity */}
@@ -329,7 +477,7 @@ const App = () => {
         <BrainCircuit className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 text-indigo-400" />
       </div>
       <div className="text-center space-y-2">
-        <h2 className="text-2xl font-bold text-white">Agent {config.model} is forging...</h2>
+        <h2 className="text-2xl font-bold text-white">{getSelectedModel().name} is crafting...</h2>
         <p className="text-slate-400">Researching {getEffectiveTopic()} for {config.complexity} level questions.</p>
       </div>
     </div>
