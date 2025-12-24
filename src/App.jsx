@@ -191,7 +191,7 @@ const App = () => {
     const selectedModel = getSelectedModel();
     const apiKey = API_KEYS[selectedModel.provider];
     
-    if (!apiKey) {
+    if (!apiKey || !apiKey.trim().length) {
       setError(`Please configure your ${selectedModel.provider === 'gemini' ? 'Gemini' : selectedModel.provider === 'claude' ? 'Claude' : 'ChatGPT'} API key in the .env file.`);
       return;
     }
@@ -362,7 +362,7 @@ const App = () => {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {providerModels.map(m => {
-                    const hasApiKey = API_KEYS[provider];
+                    const hasApiKey = API_KEYS[provider] && API_KEYS[provider].trim().length > 0;
                     const isSelected = config.model === m.id;
                     const getProviderStyles = () => {
                       if (provider === 'gemini') {
